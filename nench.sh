@@ -11,6 +11,7 @@
 # - runs IPv6 speedtest by default (if the server has IPv6 connectivity)
 # Run using `curl -s bench.wget.racing | bash`
 # or `wget -qO- bench.wget.racing | bash`
+# - list of possibly required packages: curl,gawk,coreutils,util-linux,procps,ioping
 ##########
 
 command_exists()
@@ -60,8 +61,8 @@ command_benchmark()
 
     if command_exists "$1"
     then
-        time "$gnu_dd" if=/dev/zero bs=1M count=500 2> /dev/null | \
-            "$@" > /dev/null
+        ( time "$gnu_dd" if=/dev/zero bs=1M count=500 2> /dev/null | \
+            "$@" > /dev/null ) 2>&1
     else
         if [ "$QUIET" -ne 1 ]
         then
@@ -126,7 +127,7 @@ then
 fi
 
 printf '%s\n' '-------------------------------------------------'
-printf ' nench.sh v2017.06.01 -- https://git.io/nench.sh\n'
+printf ' nench.sh v2019.07.20 -- https://git.io/nench.sh\n'
 date -u '+ benchmark timestamp:    %F %T UTC'
 printf '%s\n' '-------------------------------------------------'
 
@@ -157,7 +158,7 @@ then
         printf 'Swap:         -\n'
     else
         printf 'Swap:         '
-        free -h | awk 'NR==4 {printf $2}'
+        free -h | awk '/Swap/ {printf $2}'
         printf '\n'
     fi
 else
@@ -167,7 +168,7 @@ else
     printf 'CPU cores:    '
     sysctl -n hw.ncpu
     printf 'Frequency:    '
-    grep -Eo -- '[0-9.]+-MHz' /var/run/dmesg.boot | tr -- '-' ' '
+    grep -Eo -- '[0-9.]+-MHz' /var/run/dmesg.boot | tr -- '-' ' ' | sort -u
     printf 'RAM:          '
     sysctl -n hw.physmem | B_to_MiB
 
@@ -185,12 +186,15 @@ uname -s -r -m
 printf '\n'
 
 printf 'Disks:\n'
-if command_exists lsblk
+if command_exists lsblk && [ -n "$(lsblk)" ]
 then
     lsblk --nodeps --noheadings --output NAME,SIZE,ROTA --exclude 1,2,11 | sort | awk '{if ($3 == 0) {$3="SSD"} else {$3="HDD"}; printf("%-3s%8s%5s\n", $1, $2, $3)}'
 elif [ -r "/var/run/dmesg.boot" ]
 then
-    awk '/(ad|ada|da|vtblk)[0-9]+: [0-9]+.B/ { print $1, $2/1024, "GiB" }' /var/run/dmesg.boot
+    awk '/(ad|ada|da|vtblk)[0-9]+: [0-9]+.B/ { print $1, $2/1024, "GiB" }' /var/run/dmesg.boot | sort -u
+elif command_exists df
+then
+    df -h --output=source,fstype,size,itotal | awk 'NR == 1 || /^\/dev/'
 else
     printf '[ no data available ]'
 fi
@@ -207,7 +211,7 @@ printf 'CPU: bzip2-compressing 500 MB\n    '
 command_benchmark bzip2
 
 printf 'CPU: AES-encrypting 500 MB\n    '
-command_benchmark openssl enc -e -aes-256-cbc -pass pass:12345678
+command_benchmark openssl enc -e -aes-256-cbc -pass pass:12345678 | sed '/^\*\*\* WARNING : deprecated key derivation used\.$/d;/^Using -iter or -pbkdf2 would be better\.$/d'
 
 printf '\n'
 
@@ -260,7 +264,7 @@ then
         Bps_to_MiBps
 
     printf '    Softlayer DAL (US):   '
-    download_benchmark -4 http://speedtest.dal01.softlayer.com/downloads/test100.zip | \
+    download_benchmark -4 http://speedtest.dal06.softlayer.com/downloads/test100.zip | \
         Bps_to_MiBps
 
     printf '    Online.net (FR):      '
@@ -268,7 +272,7 @@ then
         Bps_to_MiBps
 
     printf '    OVH BHS (CA):         '
-    download_benchmark -4 http://proof.ovh.ca/files/100Mio.dat | \
+    download_benchmark -4 http://speedtest-bhs.as16276.ovh/files/100Mio.dat | \
         Bps_to_MiBps
 
 else
@@ -289,7 +293,7 @@ then
         Bps_to_MiBps
 
     printf '    Softlayer DAL (US):   '
-    download_benchmark -6 http://speedtest.dal01.softlayer.com/downloads/test100.zip | \
+    download_benchmark -6 http://speedtest.dal06.softlayer.com/downloads/test100.zip | \
         Bps_to_MiBps
 
     printf '    Online.net (FR):      '
@@ -297,7 +301,7 @@ then
         Bps_to_MiBps
 
     printf '    OVH BHS (CA):         '
-    download_benchmark -6 http://proof.ovh.ca/files/100Mio.dat | \
+    download_benchmark -6 http://speedtest-bhs.as16276.ovh/files/100Mio.dat | \
         Bps_to_MiBps
 
 else
